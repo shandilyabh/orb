@@ -16,16 +16,8 @@ from models.pydantic_models import DataQuery, DataUpdate, StatusResponse, TokenD
 from services.exceptions import (AuthorizationError, DatabaseError,
                                  DocumentNotFoundError)
 from services.query_router import QueryRouter
-from core.limiter import limiter
 
-# Create a dependency for the rate limit
-limit_dependency = Depends(limiter.limit("100/minute;1000000/day"))
-
-router = APIRouter(
-    prefix="/data", 
-    tags=["Data Operations"], 
-    dependencies=[limit_dependency]
-)
+router = APIRouter(prefix="/data", tags=["Data Operations"])
 
 
 @router.post("/find_one", response_model=Dict[str, Any])
@@ -80,12 +72,7 @@ async def find_documents(
         "info": current_user.model_dump(),
         "db": request_data.db,
         "coll": request_data.collection,
-        "request": {
-            "query": request_data.query,
-            "projection": request_data.projection,
-            "limit": request_data.limit,
-            "batch_size": request_data.batch_size
-        },
+        "request": {"query": request_data.query, "projection": request_data.projection, "batch_size": request_data.batch_size},
     }
     try:
         query_router = QueryRouter(userdb_client=userdb_client, data_client=data_client, redis_client=redis_client)
@@ -119,7 +106,7 @@ async def insert_one_document(
         "info": current_user.model_dump(),
         "db": request_data.db,
         "coll": request_data.collection,
-        "request": {"query": request_data.query},
+        "request": {"document": request_data.query},
     }
     try:
         query_router = QueryRouter(userdb_client=userdb_client, data_client=data_client, redis_client=redis_client)

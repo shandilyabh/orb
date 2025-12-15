@@ -145,8 +145,6 @@ class Mongo:
             document = collection.find_one(query, projection)
             if document is None:
                 raise DocumentNotFoundError(f"Document not found in {db}.{coll} with query {query}")
-            
-            document["_id"] = str(document["_id"])
             return document
         except PyMongoError as e:
             raise DatabaseError(f"Failed to fetch document: {e}")
@@ -163,12 +161,12 @@ class Mongo:
         except PyMongoError as e:
             raise DatabaseError(f"Failed to update document: {e}")
 
-    def insert_document(self, db: str, coll: str, query: dict) -> bool:
+    def insert_document(self, db: str, coll: str, document: dict) -> bool:
         """Inserts a single document."""
         database = self.mongo_client[db]
         collection = database[coll]
         try:
-            collection.insert_one(query)
+            collection.insert_one(document)
             return True
         except PyMongoError as e:
             raise DatabaseError(f"Failed to insert document: {e}")
