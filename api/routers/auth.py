@@ -13,6 +13,7 @@ from services.authn import Auth
 from services.exceptions import (AuthenticationError, DatabaseError,
                                  DocumentNotFoundError, DuplicateUserError, PolicyNotFoundError)
 from services.query_router import QueryRouter
+from core.limiter import limiter
 
 router = APIRouter(tags=["Authentication & Users"])
 
@@ -44,7 +45,8 @@ async def login_for_access_token(
 
 
 @router.get("/users/me", response_model=TokenData)
-async def read_users_me(current_user: TokenData = Depends(get_current_user)):
+@limiter.limit("100/minute;1000000/day")
+async def read_users_me(request: Request, current_user: TokenData = Depends(get_current_user)):
     """
     Fetches the data for the currently authenticated user.
     
@@ -55,6 +57,7 @@ async def read_users_me(current_user: TokenData = Depends(get_current_user)):
 
 
 @router.post("/users", response_model=UserCreateResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("100/minute;1000000/day")
 async def create_new_user(
     request: Request,
     user_to_create: UserCreate,
@@ -109,6 +112,7 @@ async def create_new_user(
 
 
 @router.put("/users/{user_id_to_update}", response_model=StatusResponse)
+@limiter.limit("100/minute;1000000/day")
 async def update_existing_user(
     request: Request,
     user_id_to_update: str,
@@ -149,6 +153,7 @@ async def update_existing_user(
 
 
 @router.delete("/users/{user_id_to_delete}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("100/minute;1000000/day")
 async def delete_existing_user(
     request: Request,
     user_id_to_delete: str,

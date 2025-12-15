@@ -4,15 +4,16 @@ Main application entrypoint.
 This file initializes the FastAPI application, sets up metadata, registers middlewares,
 and includes the API routers.
 """
-
 import time
 import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request # type: ignore
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint # type: ignore
-from starlette.responses import Response # type: ignore
+from starlette.responses import Response, JSONResponse # type: ignore
+from slowapi.errors import RateLimitExceeded # type: ignore
 
 from core.db import DB, close_db_connection, connect_to_db
+from core.limiter import limiter
 from api.routers import auth, operations
 from services.authn import Auth
 from services.log_manager import LogManager
@@ -20,19 +21,22 @@ from services.exceptions import AuthenticationError
 from models.pydantic_models import TokenData
 from models.log_models import SuccessRequestLog, FailureRequestLog, RequestInfo
 
+# Initialize services
 logger = LogManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Context manager to handle application startup and shutdown events.
-    It connects to databases on startup and closes connections on shutdown.
+    It connects to databases and sets up app state on startup.
     """
     print("--- Starting up application and connecting to databases ---")
     connect_to_db()
+    # Make DB clients and limiter available to the app state for middleware/dependency access
     app.state.userdb_client = DB.userdb_client
     app.state.data_client = DB.data_client
     app.state.redis_client = DB.redis_client
+    app.state.limiter = limiter
     yield
     print("--- Shutting down application and closing connections ---")
     close_db_connection()
@@ -44,6 +48,20 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# --- Exception Handlers ---
+
+@app.exception_handler(RateLimitExceeded)
+def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """
+    Custom exception handler for RateLimitExceeded errors to return a
+    standard 429 Too Many Requests response.
+    """
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+    )
+
+# --- Middlewares ---
 
 class AuthContextMiddleware(BaseHTTPMiddleware):
     """
@@ -59,7 +77,6 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
             if len(parts) == 2 and parts[0].lower() == "bearer":
                 token = parts[1]
                 try:
-                    # Auth operations always use the userdb client
                     auth_service = Auth(r=request.app.state.redis_client, client=request.app.state.userdb_client)
                     payload = auth_service.authorize_user(jwt_token=token)
                     request.state.user = TokenData(**payload)
@@ -78,7 +95,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request.state.log_context = {}
         start_time = time.time()
-       
+        
+        user_id = "anonymous"
+        role = "anonymous"
         metadata = {}
         if hasattr(request.state, "user") and request.state.user:
             user_id = request.state.user.user_id
@@ -121,6 +140,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             return response
 
         except Exception as exc:
+            # Re-raise if it's a rate limit exception so the handler can catch it
+            if isinstance(exc, RateLimitExceeded):
+                raise
+
             log_data = FailureRequestLog(
                 user_id=user_id, role=role, metadata=metadata,
                 action=request.state.log_context.get("action", "unknown_route"),
@@ -135,13 +158,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             
             raise
 
-
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(AuthContextMiddleware)
 
+# --- Routers and Health Check ---
+
 app.include_router(auth.router, prefix="/api")
 app.include_router(operations.router, prefix="/api")
-
 
 @app.get("/", tags=["Health Check"])
 async def health_check():

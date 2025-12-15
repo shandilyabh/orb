@@ -16,8 +16,16 @@ from models.pydantic_models import DataQuery, DataUpdate, StatusResponse, TokenD
 from services.exceptions import (AuthorizationError, DatabaseError,
                                  DocumentNotFoundError)
 from services.query_router import QueryRouter
+from core.limiter import limiter
 
-router = APIRouter(prefix="/data", tags=["Data Operations"])
+# Create a dependency for the rate limit
+limit_dependency = Depends(limiter.limit("100/minute;1000000/day"))
+
+router = APIRouter(
+    prefix="/data", 
+    tags=["Data Operations"], 
+    dependencies=[limit_dependency]
+)
 
 
 @router.post("/find_one", response_model=Dict[str, Any])

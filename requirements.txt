@@ -8,3 +8,4 @@ PyJWT
 pydantic
 pydantic-settings
 pytest
+slowapi
