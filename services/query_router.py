@@ -22,6 +22,7 @@ class QueryRouter:
         self._data_op_map: Dict[str, Callable] = {
             "find_one": self.data_ops.fetch_document,
             "find": self.data_ops.bulk_fetch_documents,
+            "count_documents": self.data_ops.count_documents,
             "insert_one": self.data_ops.insert_document,
             "insert_many": self.data_ops.bulk_insert_documents,
             "update_one": self.data_ops.update_document,
@@ -36,7 +37,7 @@ class QueryRouter:
         Raises AuthorizationError on failure.
         """
         op_type_map = {
-            "read": ["find_one", "find"],
+            "read": ["find_one", "find", "count_documents"],
             "write": ["insert_one", "insert_many", "update_one", "update_many", "delete_one", "delete_many"],
             "user_management": self._user_op_names
         }

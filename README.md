@@ -330,7 +330,38 @@ headers = {
 
 *   **`POST /api/data/find`**
 
-    Fetches a list of all documents matching the query.
+    Fetches a list of all documents matching the query. Supports server-side sorting.
+
+    **Payload Example:**
+    ```json
+    {
+        "db": "NSE_DATA",
+        "collection": "equities",
+        "query": {
+            "series": "EQ"
+        },
+        "sort": [["timestamp", -1]]
+    }
+    ```
+
+    **Request Example:**
+    ```python
+    payload = {
+        "db": "NSE_DATA",
+        "collection": "equities",
+        "query": {"series": "EQ"},
+        "sort": [["timestamp", -1]]
+    }
+    
+    response = requests.post(f"{ORB_URL}/api/data/find", headers=headers, json=payload)
+    print(response.json())
+    ```
+
+### Count Documents
+
+*   **`POST /api/data/count_documents`**
+
+    Counts the number of documents matching the query.
 
     **Payload Example:**
     ```json
@@ -351,8 +382,9 @@ headers = {
         "query": {"series": "EQ"}
     }
     
-    response = requests.post(f"{ORB_URL}/api/data/find", headers=headers, json=payload)
+    response = requests.post(f"{ORB_URL}/api/data/count_documents", headers=headers, json=payload)
     print(response.json())
+    # Expected output: {"count": 1234}
     ```
 
 ### Insert One Document

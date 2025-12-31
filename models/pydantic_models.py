@@ -4,7 +4,7 @@ Pydantic models for request and response validation.
 These models define the data shapes for the API, providing automatic
 validation for incoming requests and serialization for outgoing responses.
 """
-from typing import Any, Dict, List, Optional, Union, Literal
+from typing import Any, Dict, List, Optional, Union, Literal, Tuple
 from pydantic import BaseModel, ConfigDict, Field # type: ignore
 
 
@@ -86,6 +86,7 @@ class DataQuery(BaseModel):
     collection: str = Field(..., description="The collection to query.")
     query: Dict[str, Any] = Field({}, description="The query filter (e.g., {'_id': '...'}).")
     projection: Optional[Dict[str, int]] = Field(None, description="Specifies the fields to return.")
+    sort: Optional[List[Tuple[str, int]]] = Field(None, description="Specifies the sort order (e.g., [['field', 1]]).")
     limit: Optional[int] = Field(None, gt=0, description="The maximum number of documents to return.")
     batch_size: Optional[int] = Field(None, gt=0, description="Specifies the number of documents in each batch.")
 
@@ -93,6 +94,11 @@ class DataQuery(BaseModel):
 class DataUpdate(DataQuery):
     """Model for generic data update operations."""
     update: Dict[str, Any] = Field(..., description="The update operation (e.g., {'$set': {'field': 'value'}}).")
+
+
+class CountResponse(BaseModel):
+    """A generic response model for returning a document count."""
+    count: int
 
 
 class StatusResponse(BaseModel):

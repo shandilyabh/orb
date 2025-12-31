@@ -3,7 +3,7 @@ Operations Interface for Mongo
 """
 
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import bcrypt # type: ignore
 from bson import ObjectId # type: ignore
@@ -149,6 +149,16 @@ class Mongo:
         except PyMongoError as e:
             raise DatabaseError(f"Failed to fetch document: {e}")
 
+    def count_documents(self, db: str, coll: str, query: dict) -> int:
+        """Counts documents matching a query."""
+        database = self.mongo_client[db]
+        collection = database[coll]
+        try:
+            count = collection.count_documents(query)
+            return count
+        except PyMongoError as e:
+            raise DatabaseError(f"Failed to count documents: {e}")
+
     def update_document(self, db: str, coll: str, query: dict, op: dict) -> bool:
         """Updates a single document."""
         database = self.mongo_client[db]
@@ -193,12 +203,14 @@ class Mongo:
         except PyMongoError as e:
             raise DatabaseError(f"Failed to bulk delete documents: {e}")
 
-    def bulk_fetch_documents(self, db: str, coll: str, query: dict = {}, projection: Optional[Dict[str, int]] = None, limit: Optional[int] = None, batch_size: Optional[int] = None) -> List[Dict]:
+    def bulk_fetch_documents(self, db: str, coll: str, query: dict = {}, projection: Optional[Dict[str, int]] = None, sort: Optional[List[Tuple[str, int]]] = None, limit: Optional[int] = None, batch_size: Optional[int] = None) -> List[Dict]:
         """Fetches multiple documents."""
         database = self.mongo_client[db]
         collection = database[coll]
         try:
             cursor = collection.find(query, projection)
+            if sort:
+                cursor = cursor.sort(sort)
             if limit:
                 cursor = cursor.limit(limit)
             if batch_size:

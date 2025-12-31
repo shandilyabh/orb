@@ -12,7 +12,7 @@ from api.dependencies import (get_current_user,
                               get_userdb_client, # type: ignore
                               get_data_client,  # type: ignore
                               get_redis_client) # type: ignore
-from models.pydantic_models import DataQuery, DataUpdate, StatusResponse, TokenData
+from models.pydantic_models import CountResponse, DataQuery, DataUpdate, StatusResponse, TokenData
 from services.exceptions import (AuthorizationError, DatabaseError,
                                  DocumentNotFoundError)
 from services.query_router import QueryRouter
@@ -72,7 +72,12 @@ async def find_documents(
         "info": current_user.model_dump(),
         "db": request_data.db,
         "coll": request_data.collection,
-        "request": {"query": request_data.query, "projection": request_data.projection, "batch_size": request_data.batch_size},
+        "request": {
+            "query": request_data.query,
+            "projection": request_data.projection,
+            "batch_size": request_data.batch_size,
+            "sort": request_data.sort
+        },
     }
     try:
         query_router = QueryRouter(userdb_client=userdb_client, data_client=data_client, redis_client=redis_client)
@@ -81,6 +86,35 @@ async def find_documents(
             if "_id" in doc.keys():
                 doc["_id"] = str(doc["_id"])
         return documents
+    except AuthorizationError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except (DatabaseError, ValueError, PyMongoError) as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/count_documents", response_model=CountResponse)
+async def count_documents(
+    request: Request,
+    request_data: DataQuery,
+    current_user: TokenData = Depends(get_current_user),
+    userdb_client: MongoClient = Depends(get_userdb_client),
+    data_client: MongoClient = Depends(get_data_client),
+    redis_client: Redis = Depends(get_redis_client),
+):
+    """
+    Counts the number of documents matching the query.
+    """
+    payload = {
+        "op": "count_documents",
+        "info": current_user.model_dump(),
+        "db": request_data.db,
+        "coll": request_data.collection,
+        "request": {"query": request_data.query},
+    }
+    try:
+        query_router = QueryRouter(userdb_client=userdb_client, data_client=data_client, redis_client=redis_client)
+        document_count = query_router.route_query(request, payload)
+        return CountResponse(count=document_count)
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except (DatabaseError, ValueError, PyMongoError) as e:
