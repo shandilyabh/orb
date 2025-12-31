@@ -330,7 +330,7 @@ headers = {
 
 *   **`POST /api/data/find`**
 
-    Fetches a list of all documents matching the query. Supports server-side sorting.
+    Fetches a list of documents matching the query. Supports server-side sorting and pagination using `limit` and `offset`.
 
     **Payload Example:**
     ```json
@@ -340,7 +340,9 @@ headers = {
         "query": {
             "series": "EQ"
         },
-        "sort": [["timestamp", -1]]
+        "sort": [["timestamp", -1]],
+        "limit": 100,
+        "offset": 0
     }
     ```
 
@@ -350,7 +352,9 @@ headers = {
         "db": "NSE_DATA",
         "collection": "equities",
         "query": {"series": "EQ"},
-        "sort": [["timestamp", -1]]
+        "sort": [["timestamp", -1]],
+        "limit": 100,
+        "offset": 0
     }
     
     response = requests.post(f"{ORB_URL}/api/data/find", headers=headers, json=payload)

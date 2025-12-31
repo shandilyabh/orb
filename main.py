@@ -148,5 +148,4 @@ async def health_check():
     """
     Simple health check endpoint to confirm the API is running and responsive.
     """
-    return {"status": "ok", "message": "Welcome to the Orb API!"}
-
+    return {"status": "ok", "message": "The Orb API is functioning properly."}

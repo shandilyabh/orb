@@ -203,7 +203,7 @@ class Mongo:
         except PyMongoError as e:
             raise DatabaseError(f"Failed to bulk delete documents: {e}")
 
-    def bulk_fetch_documents(self, db: str, coll: str, query: dict = {}, projection: Optional[Dict[str, int]] = None, sort: Optional[List[Tuple[str, int]]] = None, limit: Optional[int] = None, batch_size: Optional[int] = None) -> List[Dict]:
+    def bulk_fetch_documents(self, db: str, coll: str, query: dict = {}, projection: Optional[Dict[str, int]] = None, sort: Optional[List[Tuple[str, int]]] = None, offset: Optional[int] = None, limit: Optional[int] = None, batch_size: Optional[int] = None) -> List[Dict]:
         """Fetches multiple documents."""
         database = self.mongo_client[db]
         collection = database[coll]
@@ -211,6 +211,8 @@ class Mongo:
             cursor = collection.find(query, projection)
             if sort:
                 cursor = cursor.sort(sort)
+            if offset is not None:
+                cursor = cursor.skip(offset)
             if limit:
                 cursor = cursor.limit(limit)
             if batch_size:

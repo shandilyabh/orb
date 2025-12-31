@@ -88,6 +88,7 @@ class DataQuery(BaseModel):
     projection: Optional[Dict[str, int]] = Field(None, description="Specifies the fields to return.")
     sort: Optional[List[Tuple[str, int]]] = Field(None, description="Specifies the sort order (e.g., [['field', 1]]).")
     limit: Optional[int] = Field(None, gt=0, description="The maximum number of documents to return.")
+    offset: Optional[int] = Field(None, ge=0, description="The number of documents to skip.")
     batch_size: Optional[int] = Field(None, gt=0, description="Specifies the number of documents in each batch.")
 
 

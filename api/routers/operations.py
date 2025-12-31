@@ -75,8 +75,10 @@ async def find_documents(
         "request": {
             "query": request_data.query,
             "projection": request_data.projection,
+            "sort": request_data.sort,
+            "limit": request_data.limit,
+            "offset": request_data.offset,
             "batch_size": request_data.batch_size,
-            "sort": request_data.sort
         },
     }
     try:
