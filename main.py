@@ -80,6 +80,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
        
         metadata = {}
+        user_id = "anonymous"
+        role = "unknown"
+
         if hasattr(request.state, "user") and request.state.user:
             user_id = request.state.user.user_id
             role = request.state.user.role

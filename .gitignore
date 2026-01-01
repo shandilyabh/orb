@@ -2,3 +2,4 @@ __pycache__/
 .env
 test_*.py
 test.py
+seed_admin.py
