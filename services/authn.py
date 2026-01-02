@@ -3,7 +3,7 @@ Auth Module for Orb
 """
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Union
 from core.config import settings
 import jwt  # type: ignore
 import redis  # type: ignore
@@ -69,15 +69,7 @@ class Auth:
         
         # 1. Try Cache (Redis)
         if self.redis_client.exists(user_id):
-            raw_data = self.redis_client.hgetall(user_id)
-            # Convert Redis bytes to strings/appropriate types for consistent handling
-            user_data = {
-                "api_key_hash": raw_data.get(b'api_key_hash'),
-                "role_id": raw_data.get(b'role_id', b'').decode('utf-8'),
-                "role": raw_data.get(b'role', b'').decode('utf-8'),
-                "name": raw_data.get(b'name', b'').decode('utf-8'),
-                "dept": raw_data.get(b'dept', b'').decode('utf-8'),
-            }
+            user_data = self.redis_client.hgetall(user_id)
 
         # 2. Fallback to Database (Mongo)
         if not user_data:
@@ -87,6 +79,7 @@ class Auth:
                     raise AuthenticationError(f"User '{user_id}' not found.")
                 
                 # Prepare data structure from Mongo document
+                # Note: These values are strings, unlike Redis which returns bytes
                 user_data = {
                     "api_key_hash": mongo_user["api_key_hash"],
                     "role_id": str(mongo_user["_id"]),
@@ -96,21 +89,16 @@ class Auth:
                 }
                 
                 # 3. Self-Heal: Populate Redis for next time
-                redis_mapping = {
-                    "api_key_hash": user_data["api_key_hash"],
-                    "role_id": user_data["role_id"],
-                    "role": user_data["role"],
-                    "name": user_data["name"],
-                    "dept": user_data["dept"],
-                }
-                self.redis_client.hset(user_id, mapping=redis_mapping)
+                self.redis_client.hset(user_id, mapping=user_data)
                 
             except errors.PyMongoError as e:
                 # If Mongo fails too, we are truly stuck
                 raise DatabaseError(f"Authentication failed due to database error: {e}")
 
         # 4. Verify Password
-        hashed_key = user_data.get('api_key_hash')
+        # Handle both string (Mongo) and bytes (Redis) keys
+        hashed_key = user_data.get('api_key_hash') or user_data.get(b'api_key_hash')
+        
         if not hashed_key:
              # Should practically never happen if user exists, but good for safety
              raise AuthenticationError(f"User '{user_id}' has corrupted data (missing key hash).")
@@ -119,9 +107,12 @@ class Auth:
             raise AuthenticationError("Invalid API key provided.")
 
         # 5. Get Permissions (Always from Mongo to ensure freshness of access rules)
-        role_id = user_data.get('role_id')
-        if not role_id:
+        role_id_raw = user_data.get('role_id') or user_data.get(b'role_id')
+        if not role_id_raw:
              raise AuthenticationError(f"User '{user_id}' has no role ID assigned.")
+        
+        # Ensure role_id is string for ObjectId
+        role_id = role_id_raw.decode('utf-8') if isinstance(role_id_raw, bytes) else role_id_raw
 
         try:
             permissions = self.mongo_client.userdb.users.find_one(
@@ -134,21 +125,27 @@ class Auth:
         if not permissions:
             raise AuthenticationError(f"Could not find permissions for user '{user_id}'.")
 
-        
-        user_info_for_jwt = {
-            b'role': user_data['role'].encode('utf-8'),
-            b'name': user_data['name'].encode('utf-8'),
-            b'dept': user_data['dept'].encode('utf-8')
-        }
-
-        token = self._create_jwt(user_id=user_id, user_info=user_info_for_jwt, permissions=permissions)
+        token = self._create_jwt(user_id=user_id, user_info=user_data, permissions=permissions)
 
         return token
 
+    def _get_str_val(self, data: Dict, key_str: str, key_bytes: bytes) -> str:
+        """Helper to retrieve a string value whether the dict uses str or bytes keys."""
+        val = data.get(key_str)
+        if val is None:
+            val = data.get(key_bytes)
+        
+        if val is None:
+            return ""
+            
+        if isinstance(val, bytes):
+            return val.decode('utf-8')
+        return str(val)
 
     def _create_jwt(self, user_id: str, user_info: dict, permissions: dict) -> str:
         """
         Internal function to generate a JWT.
+        Robust to both string (Mongo) and bytes (Redis) inputs.
         """
         secret = settings.SERVER_SECRET
         if not secret:
@@ -157,10 +154,10 @@ class Auth:
         try:
             payload = {
                 "user_id": user_id,
-                "role": user_info.get(b'role', b'').decode('utf-8'),
+                "role": self._get_str_val(user_info, 'role', b'role'),
                 "metadata": {
-                    "name": user_info.get(b'name', b'').decode('utf-8'),
-                    "dept": user_info.get(b'dept', b'').decode('utf-8')
+                    "name": self._get_str_val(user_info, 'name', b'name'),
+                    "dept": self._get_str_val(user_info, 'dept', b'dept')
                 },
                 "permissions": permissions,
                 "exp": datetime.now(timezone.utc) + timedelta(hours=2)

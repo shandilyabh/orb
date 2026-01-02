@@ -10,3 +10,4 @@ pydantic-settings
 pytest
 slowapi
 python-multipart
+orjson

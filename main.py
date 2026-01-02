@@ -9,6 +9,7 @@ import time
 import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request # type: ignore
+from fastapi.middleware.gzip import GZipMiddleware # type: ignore
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint # type: ignore
 from starlette.responses import Response # type: ignore
 
@@ -159,6 +160,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             raise
 
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(AuthContextMiddleware)
 

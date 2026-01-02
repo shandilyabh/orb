@@ -12,6 +12,7 @@ from api.dependencies import (get_current_user,
                               get_userdb_client, # type: ignore
                               get_data_client,  # type: ignore
                               get_redis_client) # type: ignore
+from api.custom_responses import ORJSONResponse
 from models.pydantic_models import CountResponse, DataQuery, DataUpdate, StatusResponse, TokenData
 from services.exceptions import (AuthorizationError, DatabaseError,
                                  DocumentNotFoundError)
@@ -20,7 +21,7 @@ from services.query_router import QueryRouter
 router = APIRouter(prefix="/data", tags=["Data Operations"])
 
 
-@router.post("/find_one", response_model=Dict[str, Any])
+@router.post("/find_one")
 async def find_one_document(
     request: Request,
     request_data: DataQuery,
@@ -46,7 +47,7 @@ async def find_one_document(
         if '_id' in document.keys():
             document['_id'] = str(document['_id'])
             
-        return document
+        return ORJSONResponse(content=document)
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except AuthorizationError as e:
@@ -55,7 +56,7 @@ async def find_one_document(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.post("/find", response_model=List[Dict[str, Any]])
+@router.post("/find")
 async def find_documents(
     request: Request,
     request_data: DataQuery,
@@ -84,10 +85,19 @@ async def find_documents(
     try:
         query_router = QueryRouter(userdb_client=userdb_client, data_client=data_client, redis_client=redis_client)
         documents = query_router.route_query(request, payload)
+        
+        # We can optimize further here. If ORJSONResponse handles basic types well, 
+        # we might rely on it or keeping explicit string conversion for _id 
+        # is safer to avoid any ObjectId serialization issues in non-standard ways.
+        # Since ORJSONResponse is configured with OPT_SERIALIZE_NUMPY but not explicitly 
+        # handling PyMongo's ObjectId (unless updated), we keep manual str conversion 
+        # to be safe and consistent with previous behavior, BUT avoiding Pydantic validation overhead.
+        
         for doc in documents:
             if "_id" in doc.keys():
                 doc["_id"] = str(doc["_id"])
-        return documents
+        
+        return ORJSONResponse(content=documents)
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except (DatabaseError, ValueError, PyMongoError) as e:
