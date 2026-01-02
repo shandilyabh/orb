@@ -30,6 +30,26 @@ async def lifespan(app: FastAPI):
     """
     print("--- Starting up application and connecting to databases ---")
     connect_to_db()
+    
+    # Sync Users from MongoDB to Redis for authentication caching
+    try:
+        userdb = DB.userdb_client.userdb
+        users = list(userdb.users.find({}))
+        for user in users:
+            DB.redis_client.hset(
+                user["user_id"],
+                mapping={
+                    "api_key_hash": user["api_key_hash"],
+                    "role_id": str(user["_id"]),
+                    "role": user["role"],
+                    "name": user["metadata"].get("name", ""),
+                    "dept": user["metadata"].get("department", ""),
+                }
+            )
+        print(f"✓ Synced {len(users)} users to Redis cache.")
+    except Exception as e:
+        print(f"--- Warning: Failed to sync users to Redis on startup: {e} ---")
+
     app.state.userdb_client = DB.userdb_client
     app.state.data_client = DB.data_client
     app.state.redis_client = DB.redis_client

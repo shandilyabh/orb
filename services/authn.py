@@ -50,6 +50,7 @@ class Auth:
     def authenticate_user(self, user_id: str, api_key: str) -> str:
         """
         Authenticates a user with their API key and returns a new JWT.
+        Implements Cache-Aside pattern: Checks Redis first, falls back to Mongo.
 
         Args:
             user_id: The username of the user.
@@ -64,24 +65,67 @@ class Auth:
         if not api_key:
             raise AuthenticationError("API key was not provided.")
 
-        if self.redis_client.exists(f"{user_id}") == 0:
-            raise AuthenticationError(f"User '{user_id}' not found.")
+        user_data = None
+        
+        # 1. Try Cache (Redis)
+        if self.redis_client.exists(user_id):
+            raw_data = self.redis_client.hgetall(user_id)
+            # Convert Redis bytes to strings/appropriate types for consistent handling
+            user_data = {
+                "api_key_hash": raw_data.get(b'api_key_hash'),
+                "role_id": raw_data.get(b'role_id', b'').decode('utf-8'),
+                "role": raw_data.get(b'role', b'').decode('utf-8'),
+                "name": raw_data.get(b'name', b'').decode('utf-8'),
+                "dept": raw_data.get(b'dept', b'').decode('utf-8'),
+            }
 
-        user_data = self.redis_client.hgetall(user_id)
-        hashed_key = user_data.get(b'api_key_hash')
+        # 2. Fallback to Database (Mongo)
+        if not user_data:
+            try:
+                mongo_user = self.mongo_client.userdb.users.find_one({"user_id": user_id})
+                if not mongo_user:
+                    raise AuthenticationError(f"User '{user_id}' not found.")
+                
+                # Prepare data structure from Mongo document
+                user_data = {
+                    "api_key_hash": mongo_user["api_key_hash"],
+                    "role_id": str(mongo_user["_id"]),
+                    "role": mongo_user["role"],
+                    "name": mongo_user["metadata"].get("name", ""),
+                    "dept": mongo_user["metadata"].get("department", ""),
+                }
+                
+                # 3. Self-Heal: Populate Redis for next time
+                redis_mapping = {
+                    "api_key_hash": user_data["api_key_hash"],
+                    "role_id": user_data["role_id"],
+                    "role": user_data["role"],
+                    "name": user_data["name"],
+                    "dept": user_data["dept"],
+                }
+                self.redis_client.hset(user_id, mapping=redis_mapping)
+                
+            except errors.PyMongoError as e:
+                # If Mongo fails too, we are truly stuck
+                raise DatabaseError(f"Authentication failed due to database error: {e}")
+
+        # 4. Verify Password
+        hashed_key = user_data.get('api_key_hash')
         if not hashed_key:
-            raise AuthenticationError(f"No API key is associated with user '{user_id}'.")
+             # Should practically never happen if user exists, but good for safety
+             raise AuthenticationError(f"User '{user_id}' has corrupted data (missing key hash).")
 
         if not verify_key(api_key, hashed_key):
             raise AuthenticationError("Invalid API key provided.")
 
-        role_id = user_data.get(b'role_id')
+        # 5. Get Permissions (Always from Mongo to ensure freshness of access rules)
+        role_id = user_data.get('role_id')
         if not role_id:
-            raise AuthenticationError(f"User '{user_id}' has no role ID assigned.")
+             raise AuthenticationError(f"User '{user_id}' has no role ID assigned.")
 
         try:
             permissions = self.mongo_client.userdb.users.find_one(
-                {"_id": ObjectId(role_id.decode('utf-8'))},
+                {"_id": ObjectId(role_id)},
                 {"_id": 0, "read": 1, "write": 1, "user_management": 1}
             )
         except errors.PyMongoError as e:
@@ -90,7 +134,14 @@ class Auth:
         if not permissions:
             raise AuthenticationError(f"Could not find permissions for user '{user_id}'.")
 
-        token = self._create_jwt(user_id=user_id, user_info=user_data, permissions=permissions)
+        
+        user_info_for_jwt = {
+            b'role': user_data['role'].encode('utf-8'),
+            b'name': user_data['name'].encode('utf-8'),
+            b'dept': user_data['dept'].encode('utf-8')
+        }
+
+        token = self._create_jwt(user_id=user_id, user_info=user_info_for_jwt, permissions=permissions)
 
         return token
 
