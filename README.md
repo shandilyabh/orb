@@ -4,6 +4,60 @@
 ![high level design](assets/high_level_design.png)
 
 
+## Getting Started
+
+### Prerequisites
+
+*   **Docker**: Container runtime.
+*   **Docker Compose**: Tool for defining and running multi-container Docker applications.
+
+### Installation on Linux (Ubuntu/Debian)
+
+If you are on a Linux machine (specifically Ubuntu or Debian) and do not have Docker installed, you can use the following commands. For other distributions, please refer to the official Docker documentation.
+
+1.  **Update package index:**
+    ```bash
+    sudo apt-get update
+    ```
+
+2.  **Install Docker and Docker Compose:**
+    ```bash
+    sudo apt-get install -y docker.io docker-compose
+    ```
+
+3.  **Start and enable Docker service:**
+    ```bash
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    ```
+
+4.  **(Optional) Run Docker without sudo:**
+    ```bash
+    sudo usermod -aG docker $USER
+    newgrp docker
+    ```
+
+### Configuration
+
+Create a `.env` file in the root directory of the project. This file is required to configure the application's environment variables.
+
+**`.env` Example:**
+
+```env
+USERDB_MONGO_URI=mongodb://localhost:27017/user_db
+DATA_MONGO_URI=mongodb://localhost:27017/data_db
+REDIS_URL=redis://localhost:6379/0
+SERVER_SECRET=change_this_to_a_secure_random_string
+```
+
+### Running the Application
+
+Once Docker is installed and the `.env` file is created, you can start the application using Docker Compose:
+
+```bash
+docker-compose up --build -d
+```
+
 ## Key Components & Directory Structure
 
 ```
