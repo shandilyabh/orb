@@ -1,4 +1,0 @@
-# Caddyfile
-:80 {
-    reverse_proxy backend:8000
-}

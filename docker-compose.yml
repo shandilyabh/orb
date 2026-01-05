@@ -4,6 +4,8 @@ services:
   backend:
     build: .
     container_name: orb_backend
+    ports:
+      - "8000:8000"
     # No 'depends_on' mongo because it's external
     depends_on:
       - redis
@@ -22,21 +24,5 @@ services:
       - redis_data:/data
     restart: always
 
-  caddy:
-    image: caddy:latest
-    container_name: orb_caddy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - backend
-    restart: always
-
 volumes:
   redis_data:
-  caddy_data:
-  caddy_config:
