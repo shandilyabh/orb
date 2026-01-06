@@ -60,6 +60,7 @@ class UserCreateResponse(BaseModel):
     message: str = "User created successfully. Please store this API key securely as it will not be shown again."
     user_id: str
     api_key: str
+    status_code: int = 201
 
 
 
@@ -67,6 +68,7 @@ class Token(BaseModel):
     """Model for the JWT access token response, following OAuth2 standards."""
     access_token: str
     token_type: str = "bearer"
+    status_code: int = 200
 
 
 class TokenData(BaseModel):
@@ -78,6 +80,14 @@ class TokenData(BaseModel):
     role: str
     metadata: Dict[str, str]
     permissions: Dict[str, Any]
+
+
+class UserMeResponse(TokenData):
+    """
+    Response model for the /users/me endpoint.
+    Wraps the user data with a status code.
+    """
+    status_code: int = 200
 
 
 class DataQuery(BaseModel):
@@ -100,9 +110,11 @@ class DataUpdate(DataQuery):
 class CountResponse(BaseModel):
     """A generic response model for returning a document count."""
     count: int
+    status_code: int = 200
 
 
 class StatusResponse(BaseModel):
     """A generic response model for returning a status message."""
     status: str = "ok"
+    status_code: int = 200
     message: str

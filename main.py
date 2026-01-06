@@ -8,8 +8,10 @@ and includes the API routers.
 import time
 import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request # type: ignore
+from fastapi import FastAPI, Request, HTTPException # type: ignore
+from fastapi.exceptions import RequestValidationError # type: ignore
 from fastapi.middleware.gzip import GZipMiddleware # type: ignore
+from fastapi.responses import JSONResponse # type: ignore
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint # type: ignore
 from starlette.responses import Response # type: ignore
 
@@ -64,6 +66,28 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Custom handler for HTTPExceptions to include status_code in the response body.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status_code": exc.status_code, "detail": exc.detail},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Custom handler for validation errors to include status_code in the response body.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={"status_code": 422, "detail": exc.errors(), "message": "Validation Error"},
+    )
 
 
 class AuthContextMiddleware(BaseHTTPMiddleware):
@@ -173,4 +197,4 @@ async def health_check():
     """
     Simple health check endpoint to confirm the API is running and responsive.
     """
-    return {"status": "ok", "message": "The Orb API is functioning properly."}
+    return {"status": "ok", "message": "The Orb API is functioning properly.", "status_code": 200}

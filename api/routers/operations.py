@@ -47,7 +47,7 @@ async def find_one_document(
         if '_id' in document.keys():
             document['_id'] = str(document['_id'])
             
-        return ORJSONResponse(content=document)
+        return ORJSONResponse(content={"status_code": 200, "data": document})
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except AuthorizationError as e:
@@ -86,18 +86,11 @@ async def find_documents(
         query_router = QueryRouter(userdb_client=userdb_client, data_client=data_client, redis_client=redis_client)
         documents = query_router.route_query(request, payload)
         
-        # We can optimize further here. If ORJSONResponse handles basic types well, 
-        # we might rely on it or keeping explicit string conversion for _id 
-        # is safer to avoid any ObjectId serialization issues in non-standard ways.
-        # Since ORJSONResponse is configured with OPT_SERIALIZE_NUMPY but not explicitly 
-        # handling PyMongo's ObjectId (unless updated), we keep manual str conversion 
-        # to be safe and consistent with previous behavior, BUT avoiding Pydantic validation overhead.
-        
         for doc in documents:
             if "_id" in doc.keys():
                 doc["_id"] = str(doc["_id"])
         
-        return ORJSONResponse(content=documents)
+        return ORJSONResponse(content={"status_code": 200, "data": documents})
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except (DatabaseError, ValueError, PyMongoError) as e:

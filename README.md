@@ -193,7 +193,7 @@ headers = {
     response = requests.get(f"{ORB_URL}/")
     
     print(response.json())
-    # Expected output: {'status': 'ok', 'message': 'Welcome to the Orb API!'}
+    # Expected output: {'status': 'ok', 'message': 'The Orb API is functioning properly.', 'status_code': 200}
     ```
 
 ### Get Access Token
@@ -222,8 +222,8 @@ headers = {
     
     response = requests.post(f"{ORB_URL}/api/auth/token", data=auth_data)
     
-    access_token = response.json()["access_token"]
-    print(f"Access Token: {access_token}")
+    print(response.json())
+    # Expected output: {'access_token': '...', 'token_type': 'bearer', 'status_code': 200}
     ```
 
 ---
@@ -245,6 +245,7 @@ headers = {
     # Assumes 'headers' is already created with a valid token
     response = requests.get(f"{ORB_URL}/api/users/me", headers=headers)
     print(response.json())
+    # Expected output: {'user_id': '...', 'role': '...', 'metadata': {...}, 'permissions': {...}, 'status_code': 200}
     ```
 
 ### Create User
@@ -284,7 +285,7 @@ headers = {
     response = requests.post(f"{ORB_URL}/api/users", headers=headers, json=new_user_payload)
     
     print(response.json())
-    # On success, returns the new user's API key. Store it securely.
+    # On success, returns the new user's API key and status_code: 201. Store it securely.
     ```
 
 ### Update User
@@ -324,6 +325,7 @@ headers = {
     response = requests.put(f"{ORB_URL}/api/users/{user_to_update}", headers=headers, json=update_payload)
     
     print(response.json())
+    # Expected output: {'status': 'ok', 'message': 'User ... updated successfully.', 'status_code': 200}
     ```
 
 ### Delete User
@@ -343,8 +345,8 @@ headers = {
     # Assumes 'headers' is created with an admin token
     response = requests.delete(f"{ORB_URL}/api/users/{user_to_delete}", headers=headers)
     
-    # A successful deletion returns a 204 No Content status
-    print(f"Response Status Code: {response.status_code}")
+    print(response.json())
+    # Expected output: {'status': 'ok', 'message': 'User deleted successfully.', 'status_code': 200}
     ```
 
 ---
@@ -378,6 +380,7 @@ headers = {
     
     response = requests.post(f"{ORB_URL}/api/data/find_one", headers=headers, json=payload)
     print(response.json())
+    # Expected output: {'status_code': 200, 'data': {...}}
     ```
 
 ### Find Documents
@@ -413,6 +416,7 @@ headers = {
     
     response = requests.post(f"{ORB_URL}/api/data/find", headers=headers, json=payload)
     print(response.json())
+    # Expected output: {'status_code': 200, 'data': [{...}, {...}]}
     ```
 
 ### Count Documents
@@ -442,7 +446,7 @@ headers = {
     
     response = requests.post(f"{ORB_URL}/api/data/count_documents", headers=headers, json=payload)
     print(response.json())
-    # Expected output: {"count": 1234}
+    # Expected output: {"count": 1234, "status_code": 200}
     ```
 
 ### Insert One Document
@@ -474,6 +478,7 @@ headers = {
     
     response = requests.post(f"{ORB_URL}/api/data/insert_one", headers=headers, json=payload)
     print(response.json())
+    # Expected output: {'status': 'ok', 'message': 'Document inserted successfully.', 'status_code': 200}
     ```
 
 ### Update One Document
@@ -509,6 +514,7 @@ headers = {
     
     response = requests.post(f"{ORB_URL}/api/data/update_one", headers=headers, json=payload)
     print(response.json())
+    # Expected output: {'status': 'ok', 'message': 'Document updated successfully.', 'status_code': 200}
     ```
 
 ### Delete One Document
@@ -538,4 +544,65 @@ headers = {
     
     response = requests.post(f"{ORB_URL}/api/data/delete_one", headers=headers, json=payload)
     print(response.json())
+    # Expected output: {'status': 'ok', 'message': 'Document deleted successfully.', 'status_code': 200}
     ```
+
+---
+
+## Performance & Large Datasets
+
+### Efficient Pagination (Limit & Offset)
+
+When fetching thousands or millions of documents, you should avoid loading everything into memory at once. Use `limit` and `offset` to paginate through the results.
+
+**Pagination Strategy:**
+1.  **Count** the total documents first.
+2.  Calculate the number of pages.
+3.  Iterate using a loop, incrementing the `offset` by the `limit` each time.
+
+**Example Implementation:**
+```python
+limit = 1000
+offset = 0
+
+while True:
+    payload = {
+        "db": "NSE_DATA",
+        "collection": "equities",
+        "query": {"series": "EQ"},
+        "limit": limit,
+        "offset": offset
+    }
+    
+    response = requests.post(f"{ORB_URL}/api/data/find", headers=headers, json=payload)
+    data = response.json()["data"]
+    
+    if not data:
+        break # No more records
+        
+    process_data(data)
+    offset += limit
+```
+
+### Using Sessions for High Performance
+
+If you are making hundreds of consecutive requests to the Orb API (e.g., during a bulk migration or deep pagination), using `requests.Session()` is significantly faster than calling `requests.post()` directly. 
+
+A session keeps the underlying TCP connection open, avoiding the "handshake" overhead for every single request.
+
+**Session Example:**
+```python
+import requests
+
+# Create a session object
+session = requests.Session()
+
+# Set the auth header once on the session
+session.headers.update({"Authorization": f"Bearer {token}"})
+
+# All subsequent calls reuse the same connection
+for i in range(100):
+    payload = { ... }
+    response = session.post(f"{ORB_URL}/api/data/find", json=payload)
+    # This is ~2-3x faster for high-frequency calls
+```

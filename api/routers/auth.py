@@ -8,7 +8,7 @@ from redis import Redis # type: ignore
 
 from api.dependencies import get_current_user, get_userdb_client, get_data_client, get_redis_client # type: ignore
 from models.pydantic_models import (Token, TokenData, UserCreate,
-                                    UserCreateResponse, UserUpdate, StatusResponse)
+                                    UserCreateResponse, UserUpdate, StatusResponse, UserMeResponse)
 from services.authn import Auth
 from services.exceptions import (AuthenticationError, DatabaseError,
                                  DocumentNotFoundError, DuplicateUserError, PolicyNotFoundError)
@@ -35,7 +35,7 @@ async def login_for_access_token(
         access_token = auth_service.authenticate_user(
             user_id=form_data.username, api_key=form_data.password
         )
-        return {"access_token": access_token, "token_type": "bearer"}
+        return {"access_token": access_token, "token_type": "bearer", "status_code": 200}
     except AuthenticationError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -44,7 +44,7 @@ async def login_for_access_token(
         )
 
 
-@router.get("/users/me", response_model=TokenData)
+@router.get("/users/me", response_model=UserMeResponse)
 @limiter.limit("100/minute;1000000/day")
 async def read_users_me(request: Request, current_user: TokenData = Depends(get_current_user)):
     """
@@ -53,7 +53,7 @@ async def read_users_me(request: Request, current_user: TokenData = Depends(get_
     A simple protected endpoint to verify that the 'get_current_user'
     dependency is working correctly.
     """
-    return current_user
+    return UserMeResponse(**current_user.model_dump(), status_code=200)
 
 
 @router.post("/users", response_model=UserCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -152,7 +152,7 @@ async def update_existing_user(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.delete("/users/{user_id_to_delete}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/users/{user_id_to_delete}", response_model=StatusResponse)
 @limiter.limit("100/minute;1000000/day")
 async def delete_existing_user(
     request: Request,
@@ -187,8 +187,7 @@ async def delete_existing_user(
     try:
         query_router = QueryRouter(userdb_client=userdb_client, data_client=data_client, redis_client=redis_client)
         query_router.route_query(request, payload)
-        # On successful deletion, return no content.
-        return None
+        return StatusResponse(message="User deleted successfully.")
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except (DatabaseError, ValueError) as e:
